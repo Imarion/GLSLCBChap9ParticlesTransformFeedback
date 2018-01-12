@@ -168,6 +168,8 @@ void MyWindow::CreateVertexBuffer()
     glBufferSubData(GL_ARRAY_BUFFER, 0, nParticles * sizeof(float), data);
     delete [] data;
 
+    glBindBuffer(GL_ARRAY_BUFFER,0);
+
     // Setup the VAOs
     mFuncs->glGenVertexArrays(2, mVAOParticles);
 
@@ -266,7 +268,7 @@ void MyWindow::render()
     }
 
     deltaT = currentTimeS - tPrev;
-    if(tPrev == 0.0f) deltaT = 0.0f;
+    //if(tPrev == 0.0f) deltaT = 0.0f;
     tPrev = currentTimeS;
     angle += 0.25f * deltaT;
     if (angle > TwoPI) angle -= TwoPI;
@@ -275,7 +277,10 @@ void MyWindow::render()
 
     if (animate == true) EvolvingVal += 0.01f;
 
-    glClearColor(0.1f, 0.1f, 0.1f,1.0f);
+    qDebug() << "current Time " << currentTimeS;
+    qDebug() << "deltaT       " << deltaT;
+
+    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
@@ -283,7 +288,11 @@ void MyWindow::render()
     glEnableVertexAttribArray(3);
 
     mProgram->bind();
-    {        
+    {
+        mProgram->setUniformValue("ParticleTex", 0);
+        mProgram->setUniformValue("Accel",       QVector3D(0.0f, -0.4f, 0.0f));
+        mProgram->setUniformValue("ParticleLifetime", 3.5f);
+
         // Update pass
         mFuncs->glUniformSubroutinesuiv(GL_VERTEX_SHADER, 1, &updateSub);
 
@@ -300,7 +309,6 @@ void MyWindow::render()
 
         glDisable(GL_RASTERIZER_DISCARD);
 
-
         // Render pass
         mFuncs->glUniformSubroutinesuiv(GL_VERTEX_SHADER, 1, &renderSub);
 
@@ -308,8 +316,6 @@ void MyWindow::render()
 
         QMatrix4x4 mv1 = ViewMatrix;
         mProgram->setUniformValue("MVP", ProjectionMatrix * mv1);
-
-        mProgram->setUniformValue("ParticleTex",      0);
 
         mFuncs->glBindVertexArray(mVAOParticles[drawBuf]);
         mFuncs->glDrawTransformFeedback(GL_POINTS, feedback[drawBuf]);
