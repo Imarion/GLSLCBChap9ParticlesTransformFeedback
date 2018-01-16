@@ -22,7 +22,7 @@ MyWindow::~MyWindow()
 }
 
 MyWindow::MyWindow()
-    : mProgram(0), currentTimeMs(0), currentTimeS(0), tPrev(0), drawBuf(1), angle(M_PI/2.0f)
+    : mProgram(0), currentTimeMs(0), currentTimeS(0), deltaT(0), tPrev(0), angle(M_PI/2.0f), drawBuf(1)
 {
     setSurfaceType(QWindow::OpenGLSurface);
     setFlags(Qt::Window | Qt::WindowSystemMenuHint | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
@@ -60,17 +60,22 @@ MyWindow::MyWindow()
 
     QTimer *repaintTimer = new QTimer(this);
     connect(repaintTimer, &QTimer::timeout, this, &MyWindow::render);
-    repaintTimer->start(1000/60);
+    repaintTimer->start(1000.0f/60.0f);
 
     QTimer *elapsedTimer = new QTimer(this);
     connect(elapsedTimer, &QTimer::timeout, this, &MyWindow::modCurTime);
-    elapsedTimer->start(1);       
+    elapsedTimer->start(1000);
+
+    mStartTime.start();
 }
 
 void MyWindow::modCurTime()
 {
-    currentTimeMs++;
-    currentTimeS=currentTimeMs/1000.0f;
+    currentTimeS++;
+    currentTimeMs=currentTimeS * 1000.0f;
+
+//    currentTimeMs++;
+//    currentTimeS=currentTimeMs/1000.0f;
 }
 
 void MyWindow::initialize()
@@ -93,7 +98,7 @@ void MyWindow::initialize()
 
 void MyWindow::CreateVertexBuffer()
 {
-    nParticles = 8000;
+    nParticles = 4000;
 
     // Create and populate the buffer objects
     unsigned int posBuf[2], velBuf[2], startTimeBuf[2], initVelBuf;
@@ -103,7 +108,7 @@ void MyWindow::CreateVertexBuffer()
     glGenBuffers(2, startTimeBuf);
     glGenBuffers(1, &initVelBuf);
 
-    int size = 3* nParticles * sizeof(float);
+    int size = 3 * nParticles * sizeof(float);
 
     glBindBuffer(GL_ARRAY_BUFFER, posBuf[0]);
     glBufferData(GL_ARRAY_BUFFER, size, NULL, GL_DYNAMIC_COPY);
@@ -125,7 +130,7 @@ void MyWindow::CreateVertexBuffer()
 
     // Fill the first position buffer with zeroes
     GLfloat *data = new GLfloat[nParticles * 3];
-    for(int i = 0; i < nParticles * 3; i++ ) data[i] = 0.0f;
+    for(unsigned int i = 0; i < nParticles * 3; i++ ) data[i] = 0.0f;
     glBindBuffer(GL_ARRAY_BUFFER, posBuf[0]);
     glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
 
@@ -148,6 +153,8 @@ void MyWindow::CreateVertexBuffer()
         data[3*i]   = v.x();
         data[3*i+1] = v.y();
         data[3*i+2] = v.z();
+
+        //qDebug() << "Velocity: " << " " << v.x() << " " << v.y() << " " << v.z();
     }
     glBindBuffer(GL_ARRAY_BUFFER, velBuf[0]);
     glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
@@ -158,11 +165,12 @@ void MyWindow::CreateVertexBuffer()
     // Start time data
     data = new GLfloat[nParticles];
     float time = 0.0f;
-    float rate = 0.00075f;
+    float rate = 0.001f;
     for( unsigned int i = 0; i < nParticles; i++ )
     {
         data[i] = time;
         time   += rate;
+        //qDebug() << "start time: " << data[i];
     }
     glBindBuffer(GL_ARRAY_BUFFER, startTimeBuf[0]);
     glBufferSubData(GL_ARRAY_BUFFER, 0, nParticles * sizeof(float), data);
@@ -267,25 +275,25 @@ void MyWindow::render()
         mUpdateSize = false;
     }
 
-    deltaT = currentTimeS - tPrev;
-    //if(tPrev == 0.0f) deltaT = 0.0f;
-    tPrev = currentTimeS;
-    angle += 0.25f * deltaT;
-    if (angle > TwoPI) angle -= TwoPI;
+//    deltaT = currentTimeS - tPrev;
+//    if(tPrev == 0.0f) deltaT = 0.0f;
+//    tPrev = currentTimeS;
+//    angle += 0.25f * deltaT;
+//    if (angle > TwoPI) angle -= TwoPI;
+
+    float elapsed = mStartTime.elapsed() / 1000.0f;
+    deltaT = elapsed - tPrev;
+    tPrev  = elapsed;
 
     static float EvolvingVal = 0.0f;
 
     if (animate == true) EvolvingVal += 0.01f;
 
-    qDebug() << "current Time " << currentTimeS;
-    qDebug() << "deltaT       " << deltaT;
+//    qDebug() << "current Time " << currentTimeMs;
+//    qDebug() << "Time elapsed " << elapsed;
+//    qDebug() << "deltaT       " << deltaT;
 
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-    glEnableVertexAttribArray(3);
 
     mProgram->bind();
     {
@@ -296,7 +304,8 @@ void MyWindow::render()
         // Update pass
         mFuncs->glUniformSubroutinesuiv(GL_VERTEX_SHADER, 1, &updateSub);
 
-        mProgram->setUniformValue("Time", (float)currentTimeS);
+        //mProgram->setUniformValue("Time", (float)currentTimeS);
+        mProgram->setUniformValue("Time", (float)elapsed);
         mProgram->setUniformValue("H",    (float)deltaT);
 
         glEnable(GL_RASTERIZER_DISCARD);
@@ -304,8 +313,19 @@ void MyWindow::render()
 
         mFuncs->glBeginTransformFeedback(GL_POINTS);
             mFuncs->glBindVertexArray(mVAOParticles[1-drawBuf]);
+
+            glEnableVertexAttribArray(0);
+            glEnableVertexAttribArray(1);
+            glEnableVertexAttribArray(2);
+            glEnableVertexAttribArray(3);
+
             glDrawArrays(GL_POINTS, 0, nParticles);
         mFuncs->glEndTransformFeedback();
+
+        glDisableVertexAttribArray(0);
+        glDisableVertexAttribArray(1);
+        glDisableVertexAttribArray(2);
+        glDisableVertexAttribArray(3);
 
         glDisable(GL_RASTERIZER_DISCARD);
 
@@ -318,6 +338,12 @@ void MyWindow::render()
         mProgram->setUniformValue("MVP", ProjectionMatrix * mv1);
 
         mFuncs->glBindVertexArray(mVAOParticles[drawBuf]);
+
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+        glEnableVertexAttribArray(3);
+
         mFuncs->glDrawTransformFeedback(GL_POINTS, feedback[drawBuf]);
 
         glDisableVertexAttribArray(0);

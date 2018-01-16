@@ -1,5 +1,6 @@
 #include <QWindow>
 #include <QTimer>
+#include <QTime>
 #include <QString>
 #include <QKeyEvent>
 
@@ -51,6 +52,7 @@ private:
 
     QOpenGLShaderProgram *mProgram;
 
+    QTime  mStartTime;
     QTimer mRepaintTimer;
     double currentTimeMs;
     double currentTimeS, deltaT;
